@@ -7,3 +7,4 @@ coverage/
 *.log
 .DS_Store
 *.bun-build
+.claude/settings.local.json
