@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [production]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    # FFI (setattrlist, xattr) and APFS birth times are macOS-specific.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run ci
+      - name: Lint commit messages
+        if: github.event_name == 'pull_request'
+        run: bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
