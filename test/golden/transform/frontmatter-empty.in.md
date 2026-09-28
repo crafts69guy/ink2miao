@@ -1,0 +1,3 @@
+---
+---
+Empty front matter
