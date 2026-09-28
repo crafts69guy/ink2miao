@@ -1,0 +1,10 @@
+[install]
+exact = true
+
+[test]
+coverageThreshold = { lines = 0.98, functions = 0.98 }
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true
+# Test helpers are not product code; everything under src/ is measured.
+coveragePathIgnorePatterns = ["test/**"]

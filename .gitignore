@@ -1,2 +1,9 @@
 # CocoIndex Code (ccc)
 /.cocoindex_code/
+
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+*.bun-build
