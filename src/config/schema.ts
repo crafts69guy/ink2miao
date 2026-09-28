@@ -23,6 +23,9 @@ export const ConfigSchema = z.object({
   trashReplacement: z.string().refine((s) => !/trash/i.test(s), 'must not contain "Trash"'),
   concurrency: z.coerce.number().int().min(1).max(32),
   deletions: z.enum(['move', 'keep', 'delete']),
+  source: z.enum(['http', 'backup']),
+  /** Inkdrop JSON backup folder for `source = "backup"` (default: Inkdrop's backupPath). */
+  backupDir: z.string().min(1).nullable(),
   inkdropConfig: z.string().min(1),
 });
 
@@ -40,5 +43,7 @@ export const CONFIG_KEYS: Readonly<Record<ConfigKey, { toml: string; env: string
   trashReplacement: { toml: 'trash_replacement', env: 'INK2MIAO_TRASH_REPLACEMENT' },
   concurrency: { toml: 'concurrency', env: 'INK2MIAO_CONCURRENCY' },
   deletions: { toml: 'deletions', env: 'INK2MIAO_DELETIONS' },
+  source: { toml: 'source', env: 'INK2MIAO_SOURCE' },
+  backupDir: { toml: 'backup_dir', env: 'INK2MIAO_BACKUP_DIR' },
   inkdropConfig: { toml: 'inkdrop_config', env: 'INK2MIAO_INKDROP_CONFIG' },
 };

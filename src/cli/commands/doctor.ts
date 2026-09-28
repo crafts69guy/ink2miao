@@ -9,6 +9,7 @@ import { assignFolders } from '../../naming/folders.ts';
 import { assignTitles } from '../../naming/titles.ts';
 import { withAncestors } from '../../plan/render.ts';
 import { HttpSource } from '../../source/http.ts';
+import type { Source } from '../../source/types.ts';
 import { type ExitCode as Code, ExitCode, errorMessage } from '../../util/errors.ts';
 import { MAX_FOLDERS } from '../../verify/rules.ts';
 import type { Session } from '../context.ts';
@@ -93,7 +94,30 @@ async function checkMetadata(s: Session): Promise<Check> {
   }
 }
 
+async function checkBackup(s: Session, checks: Check[]): Promise<void> {
+  try {
+    const source = s.source();
+    await source.probe(s.deps.signal);
+    checks.push({ name: 'inkdrop backup', status: 'ok', detail: source.describe });
+    await checkLibrary(s, source, checks);
+  } catch (e) {
+    checks.push({ name: 'inkdrop backup', status: 'fail', detail: errorMessage(e) });
+  }
+}
+
+async function checkLibrary(s: Session, source: Source, checks: Check[]): Promise<void> {
+  const docs: StoredDoc[] = [];
+  for await (const batch of source.changes(null, s.deps.signal)) {
+    for (const c of batch.changes) if (!c.deleted) docs.push(c);
+  }
+  checks.push(...libraryChecks(s, docs));
+}
+
 async function checkInkdrop(s: Session, checks: Check[]): Promise<void> {
+  if (s.loaded.config.source === 'backup') {
+    await checkBackup(s, checks);
+    return;
+  }
   let server: InkdropServer;
   try {
     server = resolveInkdropServer(s.deps.env, s.loaded.config.inkdropConfig);
@@ -106,11 +130,7 @@ async function checkInkdrop(s: Session, checks: Check[]): Promise<void> {
   try {
     const { version } = await source.probe(s.deps.signal);
     checks.push({ name: 'inkdrop server', status: 'ok', detail: `${server.url} (v${version})` });
-    const docs: StoredDoc[] = [];
-    for await (const batch of source.changes(null, s.deps.signal)) {
-      for (const c of batch.changes) if (!c.deleted) docs.push(c);
-    }
-    checks.push(...libraryChecks(s, docs));
+    await checkLibrary(s, source, checks);
   } catch (e) {
     checks.push({ name: 'inkdrop server', status: 'fail', detail: errorMessage(e) });
   }

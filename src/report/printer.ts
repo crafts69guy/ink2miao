@@ -71,7 +71,9 @@ export class Printer {
 
   progress(label: string, done: number, total: number): void {
     if (this.opts.json || this.opts.quiet || !this.opts.tty) return;
-    this.err.write(`\r\x1b[2K${this.c.dim(`${label} ${done}/${total}`)}`);
+    this.err.write(
+      `\r\x1b[2K${progressBar(done, total)} ${this.c.dim(`${label} ${done}/${total}`)}`,
+    );
     this.#progressShown = true;
   }
 
@@ -80,6 +82,14 @@ export class Printer {
     this.err.write('\r\x1b[2K');
     this.#progressShown = false;
   }
+}
+
+/** `█████░░░░░  50%` (a spinner-like pulse when the total is unknown, i.e. done === total). */
+export function progressBar(done: number, total: number, width = 20): string {
+  const ratio = total > 0 ? Math.min(1, done / total) : 0;
+  const filled = Math.round(ratio * width);
+  const pct = `${Math.round(ratio * 100)}%`.padStart(4);
+  return `${'█'.repeat(filled)}${'░'.repeat(width - filled)} ${pct}`;
 }
 
 /** OSC 8 terminal hyperlink to a local file (plain text when not a TTY). */

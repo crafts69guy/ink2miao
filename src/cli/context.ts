@@ -1,13 +1,16 @@
-import { resolveInkdropServer } from '../config/inkdrop.ts';
+import { inkdropBackupDir, resolveInkdropServer } from '../config/inkdrop.ts';
 import { type LoadedConfig, loadConfig, statePath } from '../config/load.ts';
 import type { Env } from '../config/paths.ts';
 import type { ConfigKey } from '../config/schema.ts';
 import type { RenderOptions } from '../plan/render.ts';
 import type { Platform } from '../platform/types.ts';
 import { Printer, type Writer } from '../report/printer.ts';
+import { BackupSource } from '../source/backup.ts';
 import { HttpSource } from '../source/http.ts';
 import type { Source } from '../source/types.ts';
 import { StateDb } from '../state/db.ts';
+import type { Exec } from './io/exec.ts';
+import type { Prompter } from './io/prompter.ts';
 
 /** Everything the CLI touches in the outside world, injectable for tests. */
 export interface Deps {
@@ -28,6 +31,11 @@ export interface Deps {
   /** Poll interval while waiting for MiaoYan to quit, and the watch debounce. */
   readonly pollMs: number;
   readonly debounceMs: number;
+  readonly stdinTTY: boolean;
+  readonly prompter: Prompter;
+  readonly exec: Exec;
+  /** argv prefix that re-invokes this CLI (for fzf previews). */
+  readonly self: readonly string[];
 }
 
 export interface GlobalFlags {
@@ -86,8 +94,13 @@ export function openSession(
     },
     source() {
       if (!source) {
-        const server = resolveInkdropServer(deps.env, loaded.config.inkdropConfig);
-        source = new HttpSource({ ...server, fetch: deps.fetch });
+        const c = loaded.config;
+        if (c.source === 'backup') {
+          source = new BackupSource(c.backupDir ?? inkdropBackupDir(c.inkdropConfig));
+        } else {
+          const server = resolveInkdropServer(deps.env, c.inkdropConfig);
+          source = new HttpSource({ ...server, fetch: deps.fetch });
+        }
       }
       return source;
     },

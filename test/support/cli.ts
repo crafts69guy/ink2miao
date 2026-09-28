@@ -60,6 +60,13 @@ export function harness(root: string, serverUrl: string): Harness {
         miaoyanLibrary: () => null,
         pollMs: 5,
         debounceMs: 50,
+        stdinTTY: false,
+        prompter: {
+          confirm: async () => false,
+          choose: async () => null,
+        },
+        exec: async () => ({ exitCode: 0, stdout: '' }),
+        self: ['ink2miao'],
         ...h.deps,
       };
       const code = await run(argv, deps);

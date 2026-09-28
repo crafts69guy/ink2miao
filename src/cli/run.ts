@@ -2,15 +2,19 @@ import { Command, CommanderError, Option } from '@commander-js/extra-typings';
 import pkg from '../../package.json' with { type: 'json' };
 import type { ConfigKey } from '../config/schema.ts';
 import { CliError, ExitCode, errorMessage } from '../util/errors.ts';
+import { diffCommand, pickCommand, showCommand, titlesCommand } from './commands/browse.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { promoteCommand } from './commands/promote.ts';
 import { reportCommand } from './commands/report.ts';
 import { statusCommand } from './commands/status.ts';
 import { syncCommand } from './commands/sync.ts';
 import { verifyCommand } from './commands/verify.ts';
+import { fishCompletion } from './completion.ts';
 import { type Deps, type GlobalFlags, makePrinter, openSession, type Session } from './context.ts';
 
 type Flags = Partial<Record<ConfigKey, unknown>>;
+
+const HIDDEN: ReadonlySet<string> = new Set(['titles', 'help']);
 
 const stagingOption = () => new Option('--staging <dir>', 'staging directory');
 
@@ -50,6 +54,7 @@ function build(
     .option('--full', 'refetch everything from Inkdrop instead of changes since the last run')
     .option('-f, --force', 'overwrite files edited in staging (a backup is kept)')
     .option('--rebuild', 'wipe staging and write everything again')
+    .option('--renormalize', 'recompute every filename from scratch (renames files)')
     .addOption(
       new Option('--deletions <mode>', 'notes deleted in Inkdrop').choices([
         'move',
@@ -77,7 +82,13 @@ function build(
           deletions: o.deletions,
         },
         (s) =>
-          syncCommand(s, { dryRun: o.dryRun, full: o.full, force: o.force, rebuild: o.rebuild }),
+          syncCommand(s, {
+            dryRun: o.dryRun,
+            full: o.full,
+            force: o.force,
+            rebuild: o.rebuild,
+            renormalize: o.renormalize,
+          }),
       ),
     );
 
@@ -130,6 +141,54 @@ function build(
         (s) => verifyCommand(s, { library: o.target !== undefined }),
       ),
     );
+
+  program
+    .command('show')
+    .alias('preview')
+    .description('print a note (glow on a terminal) and its attachments')
+    .argument('<note>', 'id, exact title, path or search text')
+    .option('--plain', 'raw markdown only (for previews and pipes)')
+    .option('--source', 'the original Inkdrop body instead of the rewritten one')
+    .action(async (note, o) => exec({}, (s) => showCommand(s, note, o)));
+
+  program
+    .command('diff')
+    .description('diff the next sync against staging (delta when available)')
+    .argument('<note>', 'id, exact title, path or search text')
+    .option('--library', 'staging vs. the MiaoYan library instead')
+    .option('--source', 'original Inkdrop body vs. the rewritten one instead')
+    .action(async (note, o) => exec({}, (s) => diffCommand(s, note, o)));
+
+  program
+    .command('pick')
+    .description('fuzzy-pick notes (fzf with preview) and print or act on them')
+    .option('-m, --multi', 'select several notes')
+    .option('-q, --query <text>', 'initial query')
+    .addOption(
+      new Option('--then <action>', 'what to do with the selection')
+        .choices(['path', 'show', 'diff', 'open'] as const)
+        .default('path' as const),
+    )
+    .action(async (o) => exec({}, (s) => pickCommand(s, o)));
+
+  program
+    .command('completion')
+    .description('print shell completion (fish)')
+    .argument('<shell>', 'fish')
+    .action((shell) => {
+      if (shell !== 'fish')
+        throw new CliError(
+          `unsupported shell "${shell}"`,
+          ExitCode.Usage,
+          'only fish is supported',
+        );
+      deps.stdout.write(fishCompletion(program, HIDDEN));
+    });
+
+  program
+    .command('titles', { hidden: true })
+    .description('list exported note titles (for shell completion)')
+    .action(async () => exec({}, titlesCommand));
 
   program
     .command('report')

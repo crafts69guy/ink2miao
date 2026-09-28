@@ -39,6 +39,15 @@ bun run build                 # → dist/ink2miao
 ./dist/ink2miao verify --target
 ```
 
+Browsing (uses `fzf`, `glow`, `delta`, `chafa` when installed):
+
+```fish
+./dist/ink2miao pick --then show          # fzf with a live preview; --multi, --then diff|open|path
+./dist/ink2miao show "Note title"         # glow on a terminal; --plain, --source
+./dist/ink2miao diff "Note title"         # next sync vs staging; --library, --source
+./dist/ink2miao completion fish > ~/.config/fish/completions/ink2miao.fish
+```
+
 `promote` mirrors staging into the MiaoYan library using what it promoted before, so renames
 stay renames and your own MiaoYan notes are never touched. Notes you edited or deleted in
 MiaoYan are reported as conflicts (exit 4) and kept; `--force` overwrites them after a backup
@@ -47,7 +56,8 @@ MiaoYan are reported as conflicts (exit 4) and kept; `--force` overwrites them a
 configured folder (`defaults read com.tw93.miaoyan storageUrl`), else its iCloud container.
 
 `sync` flags: `--dry-run`, `--full` (refetch everything), `--force` (overwrite edited files
-after a backup), `--rebuild` (wipe staging and rewrite), `--deletions move|keep|delete`,
+after a backup), `--rebuild` (wipe staging and rewrite), `--renormalize` (recompute filenames
+that were kept stable, e.g. `Title (2)` after the original `Title` went away), `--deletions move|keep|delete`,
 `--link-mode`, `--[no-]include-trash`, `--concurrency`.
 
 Global flags: `--json` (NDJSON on stdout), `-q`, `-v`, `--no-color`, `--config <file>`,
@@ -81,6 +91,8 @@ Precedence: flags > environment > `$XDG_CONFIG_HOME/ink2miao/config.toml` > defa
 | `concurrency` | `INK2MIAO_CONCURRENCY` | `4` |
 | `deletions` | `INK2MIAO_DELETIONS` | `move` (into the deleted folder; `keep`, `delete` needs `--force`) |
 | `inkdrop_config` | `INK2MIAO_INKDROP_CONFIG` | `~/Library/Application Support/inkdrop/config.json` |
+| `source` | `INK2MIAO_SOURCE` | `http` (local server); `backup` reads Inkdrop's JSON backup offline |
+| `backup_dir` | `INK2MIAO_BACKUP_DIR` | Inkdrop's `core.db.backupPath` |
 
 Credentials come from Inkdrop's own `config.json`, or from `INKDROP_LOCAL_SERVER_URL`,
 `INKDROP_LOCAL_USERNAME` and `INKDROP_LOCAL_PASSWORD` (same variables as

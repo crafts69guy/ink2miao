@@ -75,3 +75,11 @@ test('promoted rows are scoped per target', () => {
   expect(db.promotedNotes('/lib2')).toHaveLength(1);
   db.close();
 });
+
+test('markDeletedExcept tombstones docs missing from a full listing', () => {
+  const db = StateDb.open(':memory:');
+  db.upsertDocs([change(noteDoc('a')), change(noteDoc('b')), change(noteDoc('c'), true)]);
+  expect(db.markDeletedExcept(new Set(['note:a']))).toBe(1);
+  expect(db.liveDocs().map((d) => d.id)).toEqual(['note:a']);
+  db.close();
+});

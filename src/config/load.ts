@@ -28,7 +28,12 @@ export interface LoadedConfig {
   readonly paths: Paths;
 }
 
-const PATH_KEYS: ReadonlySet<ConfigKey> = new Set(['staging', 'target', 'inkdropConfig']);
+const PATH_KEYS: ReadonlySet<ConfigKey> = new Set([
+  'staging',
+  'target',
+  'inkdropConfig',
+  'backupDir',
+]);
 
 function readToml(path: string): Record<string, unknown> {
   try {
@@ -78,6 +83,8 @@ export function loadConfig(input: LoadInput): LoadedConfig {
     trashReplacement: 'Bin',
     concurrency: 4,
     deletions: 'move',
+    source: 'http',
+    backupDir: null,
     inkdropConfig: join(input.home, INKDROP_CONFIG),
   };
   const merged: Record<string, unknown> = {};

@@ -18,12 +18,21 @@ const ServerSchema = z.object({
 });
 
 const InkdropConfigSchema = z.object({
-  '*': z.object({ core: z.object({ server: ServerSchema.optional() }).optional() }).optional(),
+  '*': z
+    .object({
+      core: z
+        .object({
+          server: ServerSchema.optional(),
+          db: z.object({ backupPath: z.string().optional() }).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
-type ServerConfig = z.infer<typeof ServerSchema>;
+type Core = NonNullable<NonNullable<z.infer<typeof InkdropConfigSchema>['*']>['core']>;
 
-function readServerConfig(path: string): ServerConfig | null {
+function readCore(path: string): Core | null {
   let json: unknown;
   try {
     json = JSON.parse(readFileSync(path, 'utf8'));
@@ -31,7 +40,20 @@ function readServerConfig(path: string): ServerConfig | null {
     throw new CliError(`cannot read Inkdrop config ${path}: ${errorMessage(e)}`, ExitCode.Source);
   }
   const parsed = InkdropConfigSchema.safeParse(json);
-  return parsed.success ? (parsed.data['*']?.core?.server ?? null) : null;
+  return parsed.success ? (parsed.data['*']?.core ?? null) : null;
+}
+
+/** Inkdrop's configured JSON backup folder (Preferences → Backup). */
+export function inkdropBackupDir(inkdropConfigPath: string): string {
+  const dir = readCore(inkdropConfigPath)?.db?.backupPath;
+  if (!dir) {
+    throw new CliError(
+      'no Inkdrop backup folder configured',
+      ExitCode.Usage,
+      'set backup_dir, or enable Preferences → Backup in Inkdrop',
+    );
+  }
+  return dir;
 }
 
 /**
@@ -46,7 +68,7 @@ export function resolveInkdropServer(env: Env, inkdropConfigPath: string): Inkdr
     return { url: envUrl, username: envUser, password: envPass, origin: 'env' };
   }
 
-  const server = readServerConfig(inkdropConfigPath);
+  const server = readCore(inkdropConfigPath)?.server ?? null;
   if (!server || server.enabled === false) {
     throw new CliError(
       'Inkdrop local server is not enabled',

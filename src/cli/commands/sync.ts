@@ -15,9 +15,11 @@ export interface SyncFlags {
   readonly full?: boolean | undefined;
   readonly force?: boolean | undefined;
   readonly rebuild?: boolean | undefined;
+  readonly renormalize?: boolean | undefined;
 }
 
 export const LAST_SEQ = 'last_seq';
+export const LAST_SOURCE = 'last_source';
 export const LAST_REPORT = 'last_report';
 
 /** Mirrors Inkdrop changes into the local state db; returns the server version. */
@@ -30,12 +32,22 @@ export async function pull(
   const source = s.source();
   const { version } = await source.probe(signal);
   let fetched = 0;
-  for await (const batch of source.changes(full ? null : db.getMeta(LAST_SEQ), signal)) {
+  // A different source (server ↔ backup) has unrelated sequence numbers: start over.
+  const sameSource = db.getMeta(LAST_SOURCE) === source.describe;
+  const since = full || !sameSource ? null : db.getMeta(LAST_SEQ);
+  const seen = new Set<string>();
+  for await (const batch of source.changes(since, signal)) {
     db.upsertDocs(batch.changes);
     db.setMeta(LAST_SEQ, batch.lastSeq);
+    for (const c of batch.changes) seen.add(c.id);
     fetched += batch.changes.length;
-    s.printer.progress('fetching changes', fetched, fetched);
+    s.printer.debug(`fetched ${fetched} changes…`);
   }
+  if (since === null) {
+    const gone = db.markDeletedExcept(seen);
+    if (gone > 0) s.printer.debug(`${gone} docs no longer exist upstream`);
+  }
+  db.setMeta(LAST_SOURCE, source.describe);
   s.printer.debug(`fetched ${fetched} changes from ${source.describe}`);
   return { version, fetched };
 }
@@ -86,7 +98,11 @@ export async function syncCommand(s: Session, flags: SyncFlags): Promise<Code> {
       }
       await sweepTempFiles(staging);
     }
-    const planned = computePlan(s, { fresh: rebuild, force: flags.force === true });
+    const planned = computePlan(s, {
+      fresh: rebuild,
+      force: flags.force === true,
+      renormalize: flags.renormalize === true,
+    });
     const runId = new Date(s.deps.now()).toISOString().replaceAll(':', '-');
     const exec = flags.dryRun
       ? null

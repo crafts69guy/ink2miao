@@ -129,6 +129,20 @@ export class StateDb {
     })();
   }
 
+  /**
+   * After a full listing, docs that were not in it no longer exist upstream (a backup has no
+   * tombstones for purged docs): mark them deleted. Returns how many were marked.
+   */
+  markDeletedExcept(seen: ReadonlySet<string>): number {
+    const live = this.#db.query<{ id: string }, []>('SELECT id FROM docs WHERE deleted = 0').all();
+    const gone = live.filter((r) => !seen.has(r.id));
+    const mark = this.#db.query('UPDATE docs SET deleted = 1 WHERE id = ?');
+    this.#db.transaction(() => {
+      for (const r of gone) mark.run(r.id);
+    })();
+    return gone.length;
+  }
+
   /** Live (non-deleted) docs, ready for `buildSnapshot`. */
   liveDocs(): StoredDoc[] {
     return this.#db

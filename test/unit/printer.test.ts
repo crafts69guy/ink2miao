@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { makePrinter } from '../../src/cli/context.ts';
-import { fileLink, Printer, type PrinterOptions } from '../../src/report/printer.ts';
+import { fileLink, Printer, type PrinterOptions, progressBar } from '../../src/report/printer.ts';
 
 function capture(opts: Partial<PrinterOptions> = {}) {
   const out: string[] = [];
@@ -57,9 +57,16 @@ describe('Printer', () => {
     p.progress('writing', 1, 3);
     p.info('next');
     expect(err[0]).toContain('writing 1/3');
+    expect(err[0]).toContain('33%');
     expect(err[1]).toBe('\r\x1b[2K');
     expect(err[2]).toBe('next\n');
   });
+});
+
+test('progressBar', () => {
+  expect(progressBar(5, 10, 10)).toBe('█████░░░░░  50%');
+  expect(progressBar(0, 0, 4)).toBe('░░░░   0%');
+  expect(progressBar(9, 3, 4)).toBe('████ 100%');
 });
 
 test('fileLink emits OSC 8 only on a TTY', () => {
