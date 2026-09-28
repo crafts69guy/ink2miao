@@ -32,7 +32,19 @@ bun run build                 # → dist/ink2miao
 ./dist/ink2miao status        # what the next sync would change (--remote, --exit-code)
 ./dist/ink2miao verify        # exit 5 on any integrity error
 ./dist/ink2miao report        # unresolved links, renamed titles, failures (--format json)
+
+# quit MiaoYan first (or use --wait), then copy staging into the library
+./dist/ink2miao promote --dry-run
+./dist/ink2miao promote       # --wait, --watch, --force, --target <dir>
+./dist/ink2miao verify --target
 ```
+
+`promote` mirrors staging into the MiaoYan library using what it promoted before, so renames
+stay renames and your own MiaoYan notes are never touched. Notes you edited or deleted in
+MiaoYan are reported as conflicts (exit 4) and kept; `--force` overwrites them after a backup
+(`$XDG_STATE_HOME/ink2miao/<profile>/backups/`). Dates and pins are re-applied after copying
+(pins are an xattr that iCloud does not sync to other Macs). The library defaults to MiaoYan's
+configured folder (`defaults read com.tw93.miaoyan storageUrl`), else its iCloud container.
 
 `sync` flags: `--dry-run`, `--full` (refetch everything), `--force` (overwrite edited files
 after a backup), `--rebuild` (wipe staging and rewrite), `--deletions move|keep|delete`,
@@ -49,6 +61,7 @@ Global flags: `--json` (NDJSON on stdout), `-q`, `-v`, `--no-color`, `--config <
 | 3 | Inkdrop unreachable or credentials rejected |
 | 4 | conflicts: files edited in staging were left untouched |
 | 5 | verify found errors |
+| 6 | MiaoYan is running (promote refused) |
 | 10 | `status --exit-code`: changes pending |
 | 130 | interrupted |
 
@@ -60,7 +73,7 @@ Precedence: flags > environment > `$XDG_CONFIG_HOME/ink2miao/config.toml` > defa
 |---|---|---|
 | `profile` | `INK2MIAO_PROFILE` | `default` |
 | `staging` | `INK2MIAO_STAGING` | `$XDG_DATA_HOME/ink2miao/<profile>/staging` |
-| `target` | `INK2MIAO_TARGET` | `~/Library/Mobile Documents/iCloud~com~tw93~miaoyan/Documents` |
+| `target` | `INK2MIAO_TARGET` | MiaoYan's `storageUrl`, else `~/Library/Mobile Documents/iCloud~com~tw93~miaoyan/Documents` |
 | `link_mode` | `INK2MIAO_LINK_MODE` | `auto` (`wikilink`, `goto`) |
 | `include_trash` | `INK2MIAO_INCLUDE_TRASH` | `true` |
 | `deleted_folder` | `INK2MIAO_DELETED_FOLDER` | `_Inkdrop Deleted` |

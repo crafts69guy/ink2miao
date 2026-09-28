@@ -1,12 +1,17 @@
+import { existsSync } from 'node:fs';
 import { isStaging } from '../../apply/export.ts';
 import { CliError, type ExitCode as Code, ExitCode } from '../../util/errors.ts';
 import { verifyTree } from '../../verify/rules.ts';
 import type { Session } from '../context.ts';
 import { computePlan } from './planning.ts';
 
-export async function verifyCommand(s: Session): Promise<Code> {
+export async function verifyCommand(s: Session, opts: { library: boolean }): Promise<Code> {
   const { staging } = s.loaded.config;
-  if (!isStaging(staging)) {
+  const root = opts.library ? s.target() : staging;
+  if (opts.library && !existsSync(root)) {
+    throw new CliError(`MiaoYan library not found: ${root}`, ExitCode.Usage);
+  }
+  if (!opts.library && !isStaging(staging)) {
     throw new CliError(
       `${staging} is not an ink2miao staging directory`,
       ExitCode.Usage,
@@ -21,7 +26,10 @@ export async function verifyCommand(s: Session): Promise<Code> {
       'run `ink2miao sync` first',
     );
   }
-  const report = await verifyTree(staging, render);
+  const report = await verifyTree(root, render, {
+    library: opts.library,
+    platform: s.deps.platform,
+  });
   const p = s.printer;
   p.event('verify', { ...report });
   for (const w of report.warnings) p.debug(`warn ${w.code} ${w.path}: ${w.detail}`);

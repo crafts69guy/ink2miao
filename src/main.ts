@@ -2,6 +2,7 @@
 import { homedir, tmpdir } from 'node:os';
 import { run } from './cli/run.ts';
 import { defaultPlatform } from './platform/darwin.ts';
+import { miaoyanLibrary } from './platform/miaoyan.ts';
 
 const controller = new AbortController();
 let interrupts = 0;
@@ -24,4 +25,7 @@ process.exitCode = await run(process.argv.slice(2), {
   now: Date.now,
   which: (bin) => Bun.which(bin),
   tmpDir: tmpdir(),
+  miaoyanLibrary: () => miaoyanLibrary(),
+  pollMs: 2000,
+  debounceMs: 3000,
 });

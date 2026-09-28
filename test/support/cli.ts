@@ -57,6 +57,9 @@ export function harness(root: string, serverUrl: string): Harness {
         now: () => Date.UTC(2026, 8, 28),
         which: (bin) => (bin === 'fzf' ? '/usr/bin/fzf' : null),
         tmpDir: root,
+        miaoyanLibrary: () => null,
+        pollMs: 5,
+        debounceMs: 50,
         ...h.deps,
       };
       const code = await run(argv, deps);

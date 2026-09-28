@@ -23,6 +23,11 @@ export interface Deps {
   readonly now: () => number;
   readonly which: (bin: string) => string | null;
   readonly tmpDir: string;
+  /** MiaoYan's configured library folder (from its preferences), if any. */
+  readonly miaoyanLibrary: () => string | null;
+  /** Poll interval while waiting for MiaoYan to quit, and the watch debounce. */
+  readonly pollMs: number;
+  readonly debounceMs: number;
 }
 
 export interface GlobalFlags {
@@ -41,6 +46,8 @@ export interface Session {
   db(): StateDb;
   source(): Source;
   renderOptions(): RenderOptions;
+  /** The MiaoYan library: explicit config wins, then MiaoYan's own setting, then the default. */
+  target(): string;
   close(): void;
 }
 
@@ -92,6 +99,10 @@ export function openSession(
         deletedFolder: c.deletedFolder,
         trashReplacement: c.trashReplacement,
       };
+    },
+    target() {
+      const explicit = loaded.origins.target !== 'default';
+      return explicit ? loaded.config.target : (deps.miaoyanLibrary() ?? loaded.config.target);
     },
     close() {
       db?.close();

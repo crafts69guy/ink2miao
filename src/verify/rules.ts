@@ -1,7 +1,8 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { nameKey, RESERVED_FOLDER_NAMES, stemToDisplayTitle } from '../naming/sanitize.ts';
 import type { RenderedNote, RenderPlan } from '../plan/render.ts';
+import type { Platform } from '../platform/types.ts';
 import { readFrontMatterId } from '../transform/frontmatter.ts';
 import { maskProtected, scanMarkdown } from '../transform/scan.ts';
 import { md5Hex } from '../util/hash.ts';
@@ -15,6 +16,23 @@ export interface Issue {
   readonly path: string;
   readonly detail: string;
 }
+
+export interface VerifyOptions {
+  /**
+   * The MiaoYan library rather than staging: the user's own notes and edits made in MiaoYan
+   * are expected (warnings), and dates/pins are checked too.
+   */
+  readonly library: boolean;
+  readonly platform: Platform | null;
+}
+
+/** Issues that are normal in a live library and only warnings there. */
+const LIBRARY_WARNINGS: ReadonlySet<string> = new Set([
+  'unexpected_note',
+  'stray_file',
+  'hidden_folder',
+  'content_mismatch',
+]);
 
 export interface VerifyReport {
   readonly errors: readonly Issue[];
@@ -166,7 +184,25 @@ function checkLinks(ctx: NoteContext, issues: Issue[]): void {
   checkFrontMatter(ctx, scan, issues);
 }
 
-async function checkNotes(root: string, tree: Tree, plan: RenderPlan, issues: Issue[]) {
+async function checkMetadata(root: string, n: RenderedNote, platform: Platform, issues: Issue[]) {
+  const st = await stat(join(root, n.path));
+  if (st.birthtime.getTime() !== n.createdAt || st.mtime.getTime() !== n.updatedAt) {
+    const detail = `birth ${st.birthtime.toISOString()}, modified ${st.mtime.toISOString()}`;
+    issues.push({ level: 'warn', code: 'dates_differ', path: n.path, detail });
+  }
+  if (platform.isPinned(join(root, n.path)) !== n.pinned) {
+    const detail = n.pinned ? 'should be pinned' : 'should not be pinned';
+    issues.push({ level: 'warn', code: 'pin_differs', path: n.path, detail });
+  }
+}
+
+async function checkNotes(
+  root: string,
+  tree: Tree,
+  plan: RenderPlan,
+  opts: VerifyOptions,
+  issues: Issue[],
+) {
   const expected = new Map(plan.notes.map((n) => [n.path, n]));
   const present = new Set([...tree.markdown, ...tree.others]);
   const titles = new Set(
@@ -182,9 +218,12 @@ async function checkNotes(root: string, tree: Tree, plan: RenderPlan, issues: Is
     const exp = expected.get(path);
     if (!exp) {
       issues.push({ level: 'error', code: 'unexpected_note', path, detail: 'not in the export' });
+      // The user's own MiaoYan notes are not ours to lint.
+      if (opts.library) continue;
     } else if (exp.content !== text) {
       issues.push({ level: 'error', code: 'content_mismatch', path, detail: exp.id });
     }
+    if (exp && opts.library && opts.platform) await checkMetadata(root, exp, opts.platform, issues);
     checkLinks({ path, text, expected: exp, titles, present }, issues);
   }
 }
@@ -206,13 +245,20 @@ async function checkAttachments(root: string, plan: RenderPlan, issues: Issue[])
 }
 
 /** Checks a written library tree against the plan it was rendered from. */
-export async function verifyTree(root: string, plan: RenderPlan): Promise<VerifyReport> {
+export async function verifyTree(
+  root: string,
+  plan: RenderPlan,
+  opts: VerifyOptions = { library: false, platform: null },
+): Promise<VerifyReport> {
   const tree = await walk(root);
   const issues: Issue[] = [];
   checkNames(tree, issues);
-  await checkNotes(root, tree, plan, issues);
+  await checkNotes(root, tree, plan, opts, issues);
   const attachments = await checkAttachments(root, plan, issues);
-  const unique = [...new Map(issues.map((i) => [`${i.code}|${i.path}|${i.detail}`, i])).values()];
+  const leveled = issues.map((i) =>
+    opts.library && LIBRARY_WARNINGS.has(i.code) ? { ...i, level: 'warn' as const } : i,
+  );
+  const unique = [...new Map(leveled.map((i) => [`${i.code}|${i.path}|${i.detail}`, i])).values()];
   return {
     errors: unique.filter((i) => i.level === 'error'),
     warnings: unique.filter((i) => i.level === 'warn'),

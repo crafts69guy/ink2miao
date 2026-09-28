@@ -27,7 +27,32 @@ const MIGRATIONS: readonly string[] = [
      file_id TEXT NOT NULL,
      md5 TEXT NOT NULL
    );`,
+  `CREATE TABLE promoted_notes (
+     target TEXT NOT NULL,
+     note_id TEXT NOT NULL,
+     path TEXT NOT NULL,
+     hash TEXT NOT NULL,
+     PRIMARY KEY (target, note_id)
+   );
+   CREATE TABLE promoted_files (
+     target TEXT NOT NULL,
+     path TEXT NOT NULL,
+     md5 TEXT NOT NULL,
+     PRIMARY KEY (target, path)
+   );`,
 ];
+
+/** What was last copied into a MiaoYan library (per target directory). */
+export interface PromotedNote {
+  readonly noteId: NoteId;
+  readonly path: string;
+  readonly hash: string;
+}
+
+export interface PromotedFile {
+  readonly path: string;
+  readonly md5: string;
+}
 
 /** What ink2miao last wrote for a note (the basis for incremental planning). */
 export interface OutNote {
@@ -189,6 +214,50 @@ export class StateDb {
 
   deleteOutAttachment(path: string): void {
     this.#db.query('DELETE FROM attachments_out WHERE path = ?').run(path);
+  }
+
+  promotedNotes(target: string): PromotedNote[] {
+    return this.#db
+      .query<PromotedNote, [string]>(
+        'SELECT note_id AS noteId, path, hash FROM promoted_notes WHERE target = ? ORDER BY note_id',
+      )
+      .all(target);
+  }
+
+  putPromotedNote(target: string, row: PromotedNote): void {
+    this.#db
+      .query(
+        `INSERT INTO promoted_notes (target, note_id, path, hash) VALUES ($target, $noteId, $path, $hash)
+         ON CONFLICT(target, note_id) DO UPDATE SET path = $path, hash = $hash`,
+      )
+      .run({ target, ...row });
+  }
+
+  deletePromotedNote(target: string, noteId: NoteId): void {
+    this.#db
+      .query('DELETE FROM promoted_notes WHERE target = ? AND note_id = ?')
+      .run(target, noteId);
+  }
+
+  promotedFiles(target: string): PromotedFile[] {
+    return this.#db
+      .query<PromotedFile, [string]>(
+        'SELECT path, md5 FROM promoted_files WHERE target = ? ORDER BY path',
+      )
+      .all(target);
+  }
+
+  putPromotedFile(target: string, row: PromotedFile): void {
+    this.#db
+      .query(
+        `INSERT INTO promoted_files (target, path, md5) VALUES ($target, $path, $md5)
+         ON CONFLICT(target, path) DO UPDATE SET md5 = $md5`,
+      )
+      .run({ target, ...row });
+  }
+
+  deletePromotedFile(target: string, path: string): void {
+    this.#db.query('DELETE FROM promoted_files WHERE target = ? AND path = ?').run(target, path);
   }
 
   /** Forgets everything written to staging (used by `sync --rebuild`). */

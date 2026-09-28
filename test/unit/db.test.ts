@@ -13,7 +13,7 @@ afterEach(() => tmp.cleanup());
 test('migrates, upserts, counts and reopens', () => {
   const path = join(tmp.path, 'nested/state.db');
   const db = StateDb.open(path);
-  expect(db.schemaVersion).toBe(2);
+  expect(db.schemaVersion).toBe(3);
   db.upsertDocs([change(noteDoc('a')), change(bookDoc('b', 'B')), change(noteDoc('x'), true)]);
   db.upsertDocs([change({ ...noteDoc('a'), _rev: '2-z', title: 'Changed' })]);
   expect(db.countDocs()).toEqual({ note: 1, book: 1, tag: 0, file: 0, deleted: 1 });
@@ -27,7 +27,7 @@ test('migrates, upserts, counts and reopens', () => {
   db.close();
 
   const again = StateDb.open(path);
-  expect(again.schemaVersion).toBe(2);
+  expect(again.schemaVersion).toBe(3);
   expect(again.getMeta('k')).toBe('v2');
   again.close();
 });
@@ -56,5 +56,22 @@ test('output rows round-trip and can be cleared', () => {
   db.clearOutputs();
   expect(db.outNotes()).toEqual([]);
   expect(db.outAttachments()).toEqual([]);
+  db.close();
+});
+
+test('promoted rows are scoped per target', () => {
+  const db = StateDb.open(':memory:');
+  db.putPromotedNote('/lib1', { noteId: 'note:a', path: 'A.md', hash: 'h1' });
+  db.putPromotedNote('/lib1', { noteId: 'note:a', path: 'B.md', hash: 'h2' });
+  db.putPromotedNote('/lib2', { noteId: 'note:a', path: 'A.md', hash: 'h1' });
+  db.putPromotedFile('/lib1', { path: 'i/x.png', md5: 'm1' });
+  db.putPromotedFile('/lib1', { path: 'i/x.png', md5: 'm2' });
+  expect(db.promotedNotes('/lib1')).toEqual([{ noteId: 'note:a', path: 'B.md', hash: 'h2' }]);
+  expect(db.promotedFiles('/lib1')).toEqual([{ path: 'i/x.png', md5: 'm2' }]);
+  db.deletePromotedNote('/lib1', 'note:a');
+  db.deletePromotedFile('/lib1', 'i/x.png');
+  expect(db.promotedNotes('/lib1')).toEqual([]);
+  expect(db.promotedFiles('/lib1')).toEqual([]);
+  expect(db.promotedNotes('/lib2')).toHaveLength(1);
   db.close();
 });

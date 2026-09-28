@@ -50,7 +50,7 @@ async function checkStaging(s: Session): Promise<Check> {
 }
 
 async function checkTarget(s: Session): Promise<Check> {
-  const { target } = s.loaded.config;
+  const target = s.target();
   try {
     const entries = await readdir(target);
     return {

@@ -3,6 +3,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import type { ConfigKey } from '../config/schema.ts';
 import { CliError, ExitCode, errorMessage } from '../util/errors.ts';
 import { doctorCommand } from './commands/doctor.ts';
+import { promoteCommand } from './commands/promote.ts';
 import { reportCommand } from './commands/report.ts';
 import { statusCommand } from './commands/status.ts';
 import { syncCommand } from './commands/sync.ts';
@@ -94,10 +95,41 @@ function build(
     );
 
   program
-    .command('verify')
-    .description('check the staging directory against the local Inkdrop mirror')
+    .command('promote')
+    .description('copy staging into the MiaoYan library (refuses while MiaoYan runs)')
     .addOption(stagingOption())
-    .action(async (o) => exec({ staging: o.staging }, verifyCommand));
+    .option('--target <dir>', 'MiaoYan library folder')
+    .option('-n, --dry-run', 'show what would change')
+    .option(
+      '-f, --force',
+      'overwrite changes made in MiaoYan (a backup is kept); ignore a running MiaoYan',
+    )
+    .option('--wait', 'wait for MiaoYan to quit instead of failing')
+    .option('--watch', 'keep running and promote whenever staging changes')
+    .addOption(
+      new Option('--deletions <mode>', 'notes deleted in Inkdrop').choices([
+        'move',
+        'keep',
+        'delete',
+      ] as const),
+    )
+    .action(async (o) =>
+      exec({ staging: o.staging, target: o.target, deletions: o.deletions }, (s) =>
+        promoteCommand(s, { dryRun: o.dryRun, force: o.force, wait: o.wait, watch: o.watch }),
+      ),
+    );
+
+  program
+    .command('verify')
+    .description('check staging (or, with --target, the MiaoYan library) against Inkdrop')
+    .addOption(stagingOption())
+    .option('--target [dir]', 'verify the MiaoYan library instead of staging')
+    .action(async (o) =>
+      exec(
+        { staging: o.staging, target: typeof o.target === 'string' ? o.target : undefined },
+        (s) => verifyCommand(s, { library: o.target !== undefined }),
+      ),
+    );
 
   program
     .command('report')
