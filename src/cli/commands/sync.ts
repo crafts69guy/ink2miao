@@ -1,14 +1,20 @@
-import { prepareStaging, writePlan } from '../../apply/export.ts';
-import { buildSnapshot } from '../../domain/snapshot.ts';
-import { renderAll } from '../../plan/render.ts';
+import { join } from 'node:path';
+import { executePlan } from '../../apply/executor.ts';
+import { ensureStaging, prepareStaging } from '../../apply/export.ts';
+import { sweepTempFiles } from '../../apply/writer.ts';
+import { profileStateDir } from '../../config/load.ts';
 import { fileLink } from '../../report/printer.ts';
-import { buildSyncReport, type SyncReport } from '../../report/sync-report.ts';
+import { buildSyncReport, describeChanges, type SyncReport } from '../../report/sync-report.ts';
+import { acquireLock } from '../../state/lock.ts';
 import { type ExitCode as Code, ExitCode } from '../../util/errors.ts';
 import type { Session } from '../context.ts';
+import { computePlan } from './planning.ts';
 
 export interface SyncFlags {
   readonly dryRun?: boolean | undefined;
   readonly full?: boolean | undefined;
+  readonly force?: boolean | undefined;
+  readonly rebuild?: boolean | undefined;
 }
 
 export const LAST_SEQ = 'last_seq';
@@ -42,10 +48,18 @@ function summarize(s: Session, r: SyncReport): void {
     `${ok} Inkdrop ${r.inkdropVersion}: ${c.notes} notes (${c.live} live, ${c.retired} deleted)`,
   );
   const target = fileLink(r.staging, r.staging, s.deps.stdoutTTY);
-  const verb = r.dryRun ? 'Would write' : 'Wrote';
   p.line(
-    `${ok} ${verb} ${c.notes} notes, ${c.attachments} attachments, ${c.folders} folders → ${target}`,
+    `${ok} ${r.dryRun ? 'Would apply' : 'Applied'}: ${describeChanges(r.changes)} → ${target}`,
   );
+  for (const x of r.conflicts) p.warn(`conflict (${x.reason}): ${x.path}`);
+  if (r.conflicts.length > 0) {
+    p.info(
+      p.c.dim(
+        'conflicting files were left untouched; `sync --force` overwrites them after a backup',
+      ),
+    );
+  }
+  if (r.backups.length > 0) p.info(`backed up ${r.backups.length} files`);
   if (r.unresolved.length + r.renames.length > 0) {
     p.warn(
       `${r.unresolved.length} unresolved references, ${r.renames.length} renamed titles — see \`ink2miao report\``,
@@ -57,33 +71,52 @@ function summarize(s: Session, r: SyncReport): void {
 }
 
 export async function syncCommand(s: Session, flags: SyncFlags): Promise<Code> {
-  const { version } = await pull(s, flags.full === true);
-  const { snapshot, invalid } = buildSnapshot(s.db().liveDocs());
-  const plan = renderAll(snapshot, s.renderOptions());
-  const { staging, target, concurrency } = s.loaded.config;
-
-  let result = null;
-  if (!flags.dryRun) {
-    await prepareStaging(staging, target);
-    result = await writePlan(staging, plan, {
-      source: s.source(),
-      platform: s.deps.platform,
-      signal: s.deps.signal,
-      concurrency,
-      onProgress: (done, total, phase) => s.printer.progress(`writing ${phase}`, done, total),
+  const stateDir = profileStateDir(s.loaded);
+  const lock = acquireLock(join(stateDir, 'lock'));
+  try {
+    const rebuild = flags.rebuild === true;
+    const { version } = await pull(s, flags.full === true || rebuild);
+    const { staging, target, concurrency } = s.loaded.config;
+    if (!flags.dryRun) {
+      if (rebuild) {
+        await prepareStaging(staging, target);
+        s.db().clearOutputs();
+      } else {
+        await ensureStaging(staging, target);
+      }
+      await sweepTempFiles(staging);
+    }
+    const planned = computePlan(s, { fresh: rebuild, force: flags.force === true });
+    const runId = new Date(s.deps.now()).toISOString().replaceAll(':', '-');
+    const exec = flags.dryRun
+      ? null
+      : await executePlan(planned.plan, {
+          root: staging,
+          store: s.db(),
+          source: s.source(),
+          platform: s.deps.platform,
+          signal: s.deps.signal,
+          concurrency,
+          backupDir: join(stateDir, 'backups', runId),
+          onProgress: (done, total, phase) => s.printer.progress(`writing ${phase}`, done, total),
+        });
+    const report = buildSyncReport({
+      render: planned.render,
+      plan: planned.plan,
+      exec,
+      source: s.source().describe,
+      inkdropVersion: version,
+      staging,
+      invalidDocs: planned.invalidDocs,
+      now: s.deps.now(),
     });
+    s.db().setMeta(LAST_REPORT, JSON.stringify(report));
+    s.printer.event('sync', { report });
+    summarize(s, report);
+    if (s.deps.signal.aborted) return ExitCode.Interrupted;
+    if (report.conflicts.length > 0) return ExitCode.Conflict;
+    return report.attachmentFailures.length > 0 ? ExitCode.Internal : ExitCode.Ok;
+  } finally {
+    lock.release();
   }
-  const report = buildSyncReport({
-    plan,
-    result,
-    source: s.source().describe,
-    inkdropVersion: version,
-    staging,
-    invalidDocs: invalid.length,
-    now: s.deps.now(),
-  });
-  s.db().setMeta(LAST_REPORT, JSON.stringify(report));
-  s.printer.event('sync', { report });
-  summarize(s, report);
-  return report.attachmentFailures.length > 0 ? ExitCode.Internal : ExitCode.Ok;
 }

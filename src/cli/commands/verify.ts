@@ -1,9 +1,8 @@
 import { isStaging } from '../../apply/export.ts';
-import { buildSnapshot } from '../../domain/snapshot.ts';
-import { renderAll } from '../../plan/render.ts';
 import { CliError, type ExitCode as Code, ExitCode } from '../../util/errors.ts';
 import { verifyTree } from '../../verify/rules.ts';
 import type { Session } from '../context.ts';
+import { computePlan } from './planning.ts';
 
 export async function verifyCommand(s: Session): Promise<Code> {
   const { staging } = s.loaded.config;
@@ -14,15 +13,15 @@ export async function verifyCommand(s: Session): Promise<Code> {
       'run `ink2miao sync` first',
     );
   }
-  const { snapshot } = buildSnapshot(s.db().liveDocs());
-  if (snapshot.notes.size === 0) {
+  const { render, hasData } = computePlan(s, { fresh: false, force: false });
+  if (!hasData) {
     throw new CliError(
       'no Inkdrop data in the local state',
       ExitCode.Usage,
       'run `ink2miao sync` first',
     );
   }
-  const report = await verifyTree(staging, renderAll(snapshot, s.renderOptions()));
+  const report = await verifyTree(staging, render);
   const p = s.printer;
   p.event('verify', { ...report });
   for (const w of report.warnings) p.debug(`warn ${w.code} ${w.path}: ${w.detail}`);

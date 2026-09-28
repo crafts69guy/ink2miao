@@ -77,6 +77,7 @@ export function loadConfig(input: LoadInput): LoadedConfig {
     deletedFolder: '_Inkdrop Deleted',
     trashReplacement: 'Bin',
     concurrency: 4,
+    deletions: 'move',
     inkdropConfig: join(input.home, INKDROP_CONFIG),
   };
   const merged: Record<string, unknown> = {};
@@ -93,6 +94,11 @@ export function loadConfig(input: LoadInput): LoadedConfig {
   return { config: parsed.data, origins, file: toml ? file : null, paths };
 }
 
+/** Per-profile state directory: state.db, lock and backups live here. */
+export function profileStateDir(loaded: LoadedConfig): string {
+  return join(loaded.paths.stateDir, loaded.config.profile);
+}
+
 export function statePath(loaded: LoadedConfig): string {
-  return join(loaded.paths.stateDir, loaded.config.profile, 'state.db');
+  return join(profileStateDir(loaded), 'state.db');
 }

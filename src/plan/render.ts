@@ -19,7 +19,11 @@ export interface RenderOptions extends FolderOptions {
 
 export interface RenderedNote {
   readonly id: NoteId;
+  /** MiaoYan display title (filename stem with `:` shown as `/`). */
   readonly title: string;
+  /** Inkdrop title and the filename stem assigned to it (kept stable across runs). */
+  readonly sourceTitle: string;
+  readonly stem: string;
   /** Library-relative path, `/`-separated, NFC. */
   readonly path: string;
   readonly folder: string;
@@ -172,6 +176,8 @@ export function renderAll(
     notes.push({
       id: note.id,
       title,
+      sourceTitle: note.title,
+      stem,
       path: join(folder, `${stem}.md`),
       folder,
       content: result.body,

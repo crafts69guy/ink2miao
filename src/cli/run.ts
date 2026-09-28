@@ -4,6 +4,7 @@ import type { ConfigKey } from '../config/schema.ts';
 import { CliError, ExitCode, errorMessage } from '../util/errors.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { reportCommand } from './commands/report.ts';
+import { statusCommand } from './commands/status.ts';
 import { syncCommand } from './commands/sync.ts';
 import { verifyCommand } from './commands/verify.ts';
 import { type Deps, type GlobalFlags, makePrinter, openSession, type Session } from './context.ts';
@@ -46,6 +47,15 @@ function build(
     .addOption(stagingOption())
     .option('-n, --dry-run', 'render and report without writing files')
     .option('--full', 'refetch everything from Inkdrop instead of changes since the last run')
+    .option('-f, --force', 'overwrite files edited in staging (a backup is kept)')
+    .option('--rebuild', 'wipe staging and write everything again')
+    .addOption(
+      new Option('--deletions <mode>', 'notes deleted in Inkdrop').choices([
+        'move',
+        'keep',
+        'delete',
+      ] as const),
+    )
     .addOption(
       new Option('--link-mode <mode>', 'note link style').choices([
         'auto',
@@ -63,8 +73,23 @@ function build(
           linkMode: o.linkMode,
           includeTrash: o.includeTrash,
           concurrency: o.concurrency,
+          deletions: o.deletions,
         },
-        (s) => syncCommand(s, { dryRun: o.dryRun, full: o.full }),
+        (s) =>
+          syncCommand(s, { dryRun: o.dryRun, full: o.full, force: o.force, rebuild: o.rebuild }),
+      ),
+    );
+
+  program
+    .command('status')
+    .alias('check')
+    .description('show what the next sync would change, and conflicts in staging')
+    .addOption(stagingOption())
+    .option('--remote', 'also ask Inkdrop for changes since the last sync')
+    .option('--exit-code', 'exit 10 when anything is pending')
+    .action(async (o) =>
+      exec({ staging: o.staging }, (s) =>
+        statusCommand(s, { remote: o.remote, exitCode: o.exitCode }),
       ),
     );
 

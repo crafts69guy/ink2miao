@@ -33,7 +33,7 @@ describe('HttpSource', () => {
   });
 
   test('changes pages through results and skips non-doc ids', async () => {
-    fake.deleted = ['note:gone'];
+    fake.remove('note:gone');
     const batches = [];
     for await (const b of source({ pageSize: 2 }).changes(null, signal)) batches.push(b);
     const ids = batches.flatMap((b) => b.changes.map((c) => c.id));
@@ -57,7 +57,6 @@ describe('HttpSource', () => {
   });
 
   test('attachment without data fails', async () => {
-    fake.docs.push(noteDoc('n'));
     await expect(source({ attempts: 1 }).attachment(meta('missing'), signal)).rejects.toThrow(
       'HTTP 404',
     );

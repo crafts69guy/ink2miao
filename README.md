@@ -10,6 +10,9 @@ Incremental, one-way migration of an [Inkdrop](https://www.inkdrop.app/) account
 - Keeps Inkdrop metadata (id, notebook, tags, status, pin, dates) under one `inkdrop:` key in
   YAML front matter, preserving any existing front matter byte-for-byte.
 - Sets file birth/modification times and MiaoYan's pin flag (`com.tw93.miaoyan.pin`).
+- Incremental: only changed notes are rewritten; renames/moves are real renames; notes that
+  link to a renamed note are updated too. Files edited in staging are reported as conflicts
+  and never overwritten without `--force` (which keeps a backup).
 - Writes to a staging directory first; `verify` checks links, attachments (md5) and naming.
 
 ## Requirements
@@ -25,10 +28,15 @@ bun run build                 # → dist/ink2miao
 
 ./dist/ink2miao doctor        # checks Inkdrop, permissions, dates/pins, folder limits
 ./dist/ink2miao sync --dry-run
-./dist/ink2miao sync          # fetch + render into the staging directory
+./dist/ink2miao sync          # fetch changes + apply them to the staging directory
+./dist/ink2miao status        # what the next sync would change (--remote, --exit-code)
 ./dist/ink2miao verify        # exit 5 on any integrity error
 ./dist/ink2miao report        # unresolved links, renamed titles, failures (--format json)
 ```
+
+`sync` flags: `--dry-run`, `--full` (refetch everything), `--force` (overwrite edited files
+after a backup), `--rebuild` (wipe staging and rewrite), `--deletions move|keep|delete`,
+`--link-mode`, `--[no-]include-trash`, `--concurrency`.
 
 Global flags: `--json` (NDJSON on stdout), `-q`, `-v`, `--no-color`, `--config <file>`,
 `--profile <name>`.
@@ -39,7 +47,9 @@ Global flags: `--json` (NDJSON on stdout), `-q`, `-v`, `--no-color`, `--config <
 | 1 | internal error / partial failure |
 | 2 | usage or configuration error |
 | 3 | Inkdrop unreachable or credentials rejected |
+| 4 | conflicts: files edited in staging were left untouched |
 | 5 | verify found errors |
+| 10 | `status --exit-code`: changes pending |
 | 130 | interrupted |
 
 ## Configuration
@@ -56,6 +66,7 @@ Precedence: flags > environment > `$XDG_CONFIG_HOME/ink2miao/config.toml` > defa
 | `deleted_folder` | `INK2MIAO_DELETED_FOLDER` | `_Inkdrop Deleted` |
 | `trash_replacement` | `INK2MIAO_TRASH_REPLACEMENT` | `Bin` |
 | `concurrency` | `INK2MIAO_CONCURRENCY` | `4` |
+| `deletions` | `INK2MIAO_DELETIONS` | `move` (into the deleted folder; `keep`, `delete` needs `--force`) |
 | `inkdrop_config` | `INK2MIAO_INKDROP_CONFIG` | `~/Library/Application Support/inkdrop/config.json` |
 
 Credentials come from Inkdrop's own `config.json`, or from `INKDROP_LOCAL_SERVER_URL`,

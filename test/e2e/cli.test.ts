@@ -52,7 +52,7 @@ describe('sync → verify → report', () => {
     const sync = await h.run('sync');
     expect(sync.code).toBe(0);
     expect(sync.stdout).toContain('4 notes (3 live, 1 deleted)');
-    expect(sync.stdout).toContain('2 attachments');
+    expect(sync.stdout).toContain('Applied: 4 created, 1 attachments fetched');
     expect(sync.stderr).toContain('next: ink2miao verify');
     expect(sync.stderr).toContain('1 unresolved references');
     const alpha = readFileSync(join(h.staging, 'Main/Alpha꞉ intro.md'), 'utf8');
@@ -75,7 +75,7 @@ describe('sync → verify → report', () => {
 
   test('second sync only fetches new changes', async () => {
     await h.run('sync');
-    fake.docs.push(noteDoc('new', { title: 'Fresh', bookId: 'book:main' }));
+    fake.put(noteDoc('new', { title: 'Fresh', bookId: 'book:main' }));
     fake.requests.length = 0;
     const r = await h.run('sync', '--verbose');
     expect(r.code).toBe(0);
@@ -89,7 +89,7 @@ describe('sync → verify → report', () => {
   test('dry run writes nothing', async () => {
     const r = await h.run('sync', '--dry-run', '--no-include-trash');
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Would write 3 notes');
+    expect(r.stdout).toContain('Would apply: 3 created, 1 attachments fetched');
     expect(r.stderr).not.toContain('next:');
     expect((await h.run('verify')).code).toBe(ExitCode.Usage);
   });
@@ -126,7 +126,7 @@ describe('sync → verify → report', () => {
   });
 
   test('verify detects tampering; lists warnings with --verbose', async () => {
-    fake.docs.push(noteDoc('w', { bookId: 'book:main', body: '[[Nowhere]]' }));
+    fake.put(noteDoc('w', { bookId: 'book:main', body: '[[Nowhere]]' }));
     await h.run('sync');
     writeFileSync(join(h.staging, 'Main/Child/Beta.md'), 'edited');
     const quiet = await h.run('verify');
@@ -152,7 +152,7 @@ describe('sync → verify → report', () => {
     writeFileSync(join(h.staging, 'precious.md'), 'x');
     const r = await h.run('sync');
     expect(r.code).toBe(ExitCode.Usage);
-    expect(r.stderr).toContain('refusing to wipe');
+    expect(r.stderr).toContain('refusing to use');
     expect(r.stderr).toContain('--staging');
   });
 
@@ -234,20 +234,15 @@ describe('doctor', () => {
   });
 
   test('too many folders fails', async () => {
-    fake.docs.push(
-      ...Array.from({ length: 100 }, (_, i) => ({
-        _id: `book:x${i}`,
-        _rev: '1',
-        name: `Book ${i}`,
-        createdAt: i,
-      })),
-    );
+    for (let i = 0; i < 100; i++) {
+      fake.put({ _id: `book:x${i}`, _rev: '1', name: `Book ${i}`, createdAt: i });
+    }
     const r = await h.run('doctor');
     expect(r.stdout).toContain('✗ folders');
   });
 
   test('invalid docs are flagged', async () => {
-    fake.docs.push({ _id: 'note:broken' });
+    fake.put({ _id: 'note:broken' });
     const r = await h.run('doctor');
     expect(r.stdout).toContain('1 invalid');
   });

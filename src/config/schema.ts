@@ -22,6 +22,7 @@ export const ConfigSchema = z.object({
   deletedFolder: folderName,
   trashReplacement: z.string().refine((s) => !/trash/i.test(s), 'must not contain "Trash"'),
   concurrency: z.coerce.number().int().min(1).max(32),
+  deletions: z.enum(['move', 'keep', 'delete']),
   inkdropConfig: z.string().min(1),
 });
 
@@ -38,5 +39,6 @@ export const CONFIG_KEYS: Readonly<Record<ConfigKey, { toml: string; env: string
   deletedFolder: { toml: 'deleted_folder', env: 'INK2MIAO_DELETED_FOLDER' },
   trashReplacement: { toml: 'trash_replacement', env: 'INK2MIAO_TRASH_REPLACEMENT' },
   concurrency: { toml: 'concurrency', env: 'INK2MIAO_CONCURRENCY' },
+  deletions: { toml: 'deletions', env: 'INK2MIAO_DELETIONS' },
   inkdropConfig: { toml: 'inkdrop_config', env: 'INK2MIAO_INKDROP_CONFIG' },
 };
